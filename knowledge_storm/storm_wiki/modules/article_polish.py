@@ -1,5 +1,5 @@
 import copy
-from typing import Union
+from typing import Union, Any, Optional, Dict
 
 import dspy
 

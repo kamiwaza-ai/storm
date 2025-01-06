@@ -632,7 +632,7 @@ class WebPageHelper:
         self,
         min_char_count: int = 150,
         snippet_chunk_size: int = 1000,
-        max_thread_num: int = 10,
+        max_thread_num: int = 15,  # Default increased to support Kamiwaza's target throughput of 500-600 tokens/s
     ):
         """
         Args:

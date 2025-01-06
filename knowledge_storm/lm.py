@@ -26,7 +26,7 @@ class OpenAIModel(dspy.OpenAI):
         self,
         model: str = "gpt-4o-mini",
         api_key: Optional[str] = None,
-        model_type: Literal["chat", "text"] = None,
+        model_type: Literal["chat", "text"] = "chat",
         **kwargs,
     ):
         super().__init__(model=model, api_key=api_key, model_type=model_type, **kwargs)
@@ -815,6 +815,47 @@ class TogetherClient(dspy.HFModel):
                 completions = [resp_json.get("choices", [])[0].get("text", "")]
             response = {"prompt": prompt, "choices": [{"text": c} for c in completions]}
             return response
+
+
+class KamiwazaModel(dspy.OpenAI):
+    """A wrapper class for Kamiwaza API, compatible with OpenAI interface."""
+
+    def __init__(
+        self,
+        model: str = "model",
+        api_key: str = "na",
+        api_base: str = "http://prod.kamiwaza.ai:51110/v1",
+        model_type: Literal["chat", "text"] = "chat",
+        **kwargs,
+    ):
+        """Initialize the Kamiwaza model with OpenAI-compatible interface."""
+        super().__init__(model=model, api_key=api_key, api_base=api_base, model_type=model_type, **kwargs)
+        self._token_usage_lock = threading.Lock()
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.model = model
+        self.api_key = api_key
+        self.api_base = api_base
+
+    def log_usage(self, response):
+        """Log the total tokens from the Kamiwaza API response."""
+        usage_data = response.get("usage")
+        if usage_data:
+            with self._token_usage_lock:
+                self.prompt_tokens += usage_data.get("prompt_tokens", 0)
+                self.completion_tokens += usage_data.get("completion_tokens", 0)
+
+    def get_usage_and_reset(self):
+        """Get the total tokens used and reset the token usage."""
+        usage = {
+            self.model: {
+                "prompt_tokens": self.prompt_tokens,
+                "completion_tokens": self.completion_tokens,
+            }
+        }
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        return usage
 
 
 class GoogleModel(dspy.dsp.modules.lm.LM):

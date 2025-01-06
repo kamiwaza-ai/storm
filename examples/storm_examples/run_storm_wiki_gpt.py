@@ -2,7 +2,7 @@
 STORM Wiki pipeline powered by GPT-3.5/4 and You.com search engine.
 You need to set up the following environment variables to run this script:
     - OPENAI_API_KEY: OpenAI API key
-    - OPENAI_API_TYPE: OpenAI API type (e.g., 'openai' or 'azure')
+    - OPENAI_API_TYPE: OpenAI API type (e.g., 'openai', 'azure', or 'kamiwaza')
     - AZURE_API_BASE: Azure API base URL if using Azure API
     - AZURE_API_VERSION: Azure API version if using Azure API
     - YDC_API_KEY: You.com API key; BING_SEARCH_API_KEY: Bing Search API key, SERPER_API_KEY: Serper API key, BRAVE_API_KEY: Brave API key, or TAVILY_API_KEY: Tavily API key
@@ -29,15 +29,29 @@ from knowledge_storm.utils import load_api_key
 
 
 def main(args):
-    load_api_key(toml_file_path='secrets.toml')
+    try:
+        load_api_key(toml_file_path='secrets.toml')
+    except FileNotFoundError:
+        print("Warning: secrets.toml not found. Using environment variables only.")
+    
     lm_configs = STORMWikiLMConfigs()
-    openai_kwargs = {
-        'api_key': os.getenv("OPENAI_API_KEY"),
-        'temperature': 1.0,
-        'top_p': 0.9,
-    }
-
-    ModelClass = OpenAIModel if os.getenv('OPENAI_API_TYPE') == 'openai' else AzureOpenAIModel
+    api_type = os.getenv('OPENAI_API_TYPE', 'openai')
+    
+    if api_type == 'kamiwaza':
+        openai_kwargs = {
+            'api_key': 'na',
+            'temperature': 1.0,
+            'top_p': 0.9,
+            'api_base': 'http://prod.kamiwaza.ai:51110/v1',
+        }
+        ModelClass = OpenAIModel  # Kamiwaza uses OpenAI-compatible interface
+    else:
+        openai_kwargs = {
+            'api_key': os.getenv("OPENAI_API_KEY"),
+            'temperature': 1.0,
+            'top_p': 0.9,
+        }
+        ModelClass = OpenAIModel if api_type == 'openai' else AzureOpenAIModel
     # If you are using Azure service, make sure the model name matches your own deployed model name.
     # The default name here is only used for demonstration and may not match your case.
     gpt_35_model_name = 'gpt-3.5-turbo' if os.getenv('OPENAI_API_TYPE') == 'openai' else 'gpt-35-turbo'

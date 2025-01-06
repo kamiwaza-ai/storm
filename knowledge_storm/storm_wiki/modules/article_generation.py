@@ -2,7 +2,7 @@ import concurrent.futures
 import copy
 import logging
 from concurrent.futures import as_completed
-from typing import List, Union
+from typing import List, Union, Any, Optional
 
 import dspy
 
@@ -22,7 +22,7 @@ class StormArticleGenerationModule(ArticleGenerationModule):
         self,
         article_gen_lm=Union[dspy.dsp.LM, dspy.dsp.HFModel],
         retrieve_top_k: int = 5,
-        max_thread_num: int = 10,
+        max_thread_num: int = 15,  # Default increased to support Kamiwaza's target throughput of 500-600 tokens/s
     ):
         super().__init__()
         self.retrieve_top_k = retrieve_top_k
@@ -55,7 +55,7 @@ class StormArticleGenerationModule(ArticleGenerationModule):
         topic: str,
         information_table: StormInformationTable,
         article_with_outline: StormArticle,
-        callback_handler: BaseCallbackHandler = None,
+        callback_handler: Optional[BaseCallbackHandler] = None,
     ) -> StormArticle:
         """
         Generate article for the topic based on the information table and article outline.

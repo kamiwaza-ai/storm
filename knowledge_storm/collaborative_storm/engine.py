@@ -232,7 +232,7 @@ class RunnerArgument:
         },
     )
     max_thread_num: int = field(
-        default=10,
+        default=15,  # Default increased to support Kamiwaza's target throughput of 500-600 tokens/s
         metadata={
             "help": "Maximum number of threads to use. "
             "Consider reducing it if keep getting 'Exceed rate limit' error when calling LM API."

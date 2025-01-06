@@ -1,4 +1,4 @@
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, Any, Dict
 
 import dspy
 
@@ -24,7 +24,7 @@ class StormOutlineGenerationModule(OutlineGenerationModule):
         topic: str,
         information_table: StormInformationTable,
         old_outline: Optional[StormArticle] = None,
-        callback_handler: BaseCallbackHandler = None,
+        callback_handler: Optional[BaseCallbackHandler] = None,
         return_draft_outline=False,
     ) -> Union[StormArticle, Tuple[StormArticle, StormArticle]]:
         """
@@ -53,9 +53,9 @@ class StormOutlineGenerationModule(OutlineGenerationModule):
         if callback_handler is not None:
             callback_handler.on_information_organization_start()
 
-        concatenated_dialogue_turns = sum(
-            [conv for (_, conv) in information_table.conversations], []
-        )
+        concatenated_dialogue_turns = []
+        for _, conv_list in information_table.conversations:
+            concatenated_dialogue_turns.extend(conv_list)
         result = self.write_outline(
             topic=topic,
             dlg_history=concatenated_dialogue_turns,
@@ -86,7 +86,7 @@ class WriteOutline(dspy.Module):
         topic: str,
         dlg_history,
         old_outline: Optional[str] = None,
-        callback_handler: BaseCallbackHandler = None,
+        callback_handler: Optional[BaseCallbackHandler] = None,
     ):
         trimmed_dlg_history = []
         for turn in dlg_history:

@@ -14,8 +14,8 @@ from ...utils import ArticleTextProcessing, FileIOHelper
 class DialogueTurn:
     def __init__(
         self,
-        agent_utterance: str = None,
-        user_utterance: str = None,
+        agent_utterance: Optional[str] = None,
+        user_utterance: Optional[str] = None,
         search_queries: Optional[List[str]] = None,
         search_results: Optional[List[Union[Information, Dict]]] = None,
     ):
@@ -35,12 +35,19 @@ class DialogueTurn:
         """
         Returns a json object that contains all information inside `self`
         """
+        search_results = []
+        if self.search_results:
+            for data in self.search_results:
+                if isinstance(data, dict):
+                    search_results.append(data)
+                else:
+                    search_results.append(data.to_dict())
         return OrderedDict(
             {
                 "agent_utterance": self.agent_utterance,
                 "user_utterance": self.user_utterance,
                 "search_queries": self.search_queries,
-                "search_results": [data.to_dict() for data in self.search_results],
+                "search_results": search_results,
             }
         )
 
@@ -55,9 +62,9 @@ class StormInformationTable(InformationTable):
     would be perspective guided dialogue history.
     """
 
-    def __init__(self, conversations=List[Tuple[str, List[DialogueTurn]]]):
+    def __init__(self, conversations: Optional[List[Tuple[str, List[DialogueTurn]]]] = None):
         super().__init__()
-        self.conversations = conversations
+        self.conversations = conversations or []
         self.url_to_info: Dict[str, Information] = (
             StormInformationTable.construct_url_to_info(self.conversations)
         )
@@ -211,8 +218,8 @@ class StormArticle(Article):
     def insert_or_create_section(
         self,
         article_dict: Dict[str, Dict],
-        parent_section_name: str = None,
-        trim_children=False,
+        parent_section_name: Optional[str] = None,
+        trim_children: bool = False,
     ):
         parent_node = (
             self.root

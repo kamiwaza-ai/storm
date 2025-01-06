@@ -14,7 +14,7 @@ from .modules.outline_generation import StormOutlineGenerationModule
 from .modules.persona_generator import StormPersonaGenerator
 from .modules.storm_dataclass import StormInformationTable, StormArticle
 from ..interface import Engine, LMConfigs, Retriever
-from ..lm import OpenAIModel, AzureOpenAIModel
+from ..lm import OpenAIModel, AzureOpenAIModel, KamiwazaModel
 from ..utils import FileIOHelper, makeStringRed, truncate_filename
 
 
@@ -39,7 +39,7 @@ class STORMWikiLMConfigs(LMConfigs):
         self,
         openai_api_key: str,
         azure_api_key: str,
-        openai_type: Literal["openai", "azure"],
+        openai_type: Literal["openai", "azure", "kamiwaza"],
         api_base: Optional[str] = None,
         api_version: Optional[str] = None,
         temperature: Optional[float] = 1.0,
@@ -61,6 +61,14 @@ class STORMWikiLMConfigs(LMConfigs):
             "top_p": top_p,
             "api_base": None,
         }
+        
+        kamiwaza_kwargs = {
+            "api_key": "na",
+            "api_provider": "openai",
+            "temperature": temperature,
+            "top_p": top_p,
+            "api_base": "http://prod.kamiwaza.ai:51110/v1",
+        }
         if openai_type and openai_type == "openai":
             self.conv_simulator_lm = OpenAIModel(
                 model="gpt-4o-mini-2024-07-18", max_tokens=500, **openai_kwargs
@@ -77,6 +85,22 @@ class STORMWikiLMConfigs(LMConfigs):
             )
             self.article_polish_lm = OpenAIModel(
                 model="gpt-4o-2024-05-13", max_tokens=4000, **openai_kwargs
+            )
+        elif openai_type and openai_type == "kamiwaza":
+            self.conv_simulator_lm = KamiwazaModel(
+                model="model", max_tokens=500, **kamiwaza_kwargs
+            )
+            self.question_asker_lm = KamiwazaModel(
+                model="model", max_tokens=500, **kamiwaza_kwargs
+            )
+            self.outline_gen_lm = KamiwazaModel(
+                model="model", max_tokens=400, **kamiwaza_kwargs
+            )
+            self.article_gen_lm = KamiwazaModel(
+                model="model", max_tokens=700, **kamiwaza_kwargs
+            )
+            self.article_polish_lm = KamiwazaModel(
+                model="model", max_tokens=4000, **kamiwaza_kwargs
             )
         elif openai_type and openai_type == "azure":
             self.conv_simulator_lm = OpenAIModel(
@@ -161,7 +185,7 @@ class STORMWikiRunnerArguments:
         metadata={"help": "Top k collected references for each section title."},
     )
     max_thread_num: int = field(
-        default=10,
+        default=15,  # Default increased to support Kamiwaza's target throughput of 500-600 tokens/s
         metadata={
             "help": "Maximum number of threads to use. "
             "Consider reducing it if keep getting 'Exceed rate limit' error when calling LM API."
@@ -212,7 +236,7 @@ class STORMWikiRunner(Engine):
     def run_knowledge_curation_module(
         self,
         ground_truth_url: str = "None",
-        callback_handler: BaseCallbackHandler = None,
+        callback_handler: Optional[BaseCallbackHandler] = None,
     ) -> StormInformationTable:
 
         information_table, conversation_log = (

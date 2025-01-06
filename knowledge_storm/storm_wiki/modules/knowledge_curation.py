@@ -2,7 +2,7 @@ import concurrent.futures
 import logging
 import os
 from concurrent.futures import as_completed
-from typing import Union, List, Tuple, Optional, Dict
+from typing import Union, List, Tuple, Optional, Dict, Any
 
 import dspy
 
@@ -49,7 +49,7 @@ class ConvSimulator(dspy.Module):
         topic: str,
         persona: str,
         ground_truth_url: str,
-        callback_handler: BaseCallbackHandler,
+        callback_handler: Optional[BaseCallbackHandler],
     ):
         """
         topic: The topic to research.
@@ -76,7 +76,8 @@ class ConvSimulator(dspy.Module):
                 search_results=expert_output.searched_results,
             )
             dlg_history.append(dlg_turn)
-            callback_handler.on_dialogue_turn_end(dlg_turn=dlg_turn)
+            if callback_handler:
+                callback_handler.on_dialogue_turn_end(dlg_turn=dlg_turn)
 
         return dspy.Prediction(dlg_history=dlg_history)
 
@@ -286,10 +287,10 @@ class StormKnowledgeCurationModule(KnowledgeCurationModule):
     def _run_conversation(
         self,
         conv_simulator,
-        topic,
-        ground_truth_url,
-        considered_personas,
-        callback_handler: BaseCallbackHandler,
+        topic: str,
+        ground_truth_url: str,
+        considered_personas: List[str],
+        callback_handler: Optional[BaseCallbackHandler],
     ) -> List[Tuple[str, List[DialogueTurn]]]:
         """
         Executes multiple conversation simulations concurrently, each with a different persona,
@@ -314,12 +315,12 @@ class StormKnowledgeCurationModule(KnowledgeCurationModule):
 
         conversations = []
 
-        def run_conv(persona):
+        def run_conv(persona: str) -> dspy.Prediction:
             return conv_simulator(
                 topic=topic,
                 ground_truth_url=ground_truth_url,
                 persona=persona,
-                callback_handler=callback_handler,
+                callback_handler=callback_handler if callback_handler else None,
             )
 
         max_workers = min(self.max_thread_num, len(considered_personas))
@@ -348,11 +349,11 @@ class StormKnowledgeCurationModule(KnowledgeCurationModule):
         self,
         topic: str,
         ground_truth_url: str,
-        callback_handler: BaseCallbackHandler,
+        callback_handler: Optional[BaseCallbackHandler],
         max_perspective: int = 0,
         disable_perspective: bool = True,
-        return_conversation_log=False,
-    ) -> Union[StormInformationTable, Tuple[StormInformationTable, Dict]]:
+        return_conversation_log: bool = False,
+    ) -> Union[StormInformationTable, Tuple[StormInformationTable, List[Dict[str, Union[str, Any]]]]]:
         """
         Curate information and knowledge for the given topic
 
