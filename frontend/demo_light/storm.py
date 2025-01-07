@@ -10,13 +10,11 @@ from streamlit_float import *
 from streamlit_option_menu import option_menu
 from knowledge_storm import STORMWikiLMConfigs, STORMWikiRunner
 from knowledge_storm.rm import YouRM
+from kamiwaza_client import KamiwazaClient
 
 
 def get_kamiwaza_endpoint():
     """Get endpoint for the running Kamiwaza model deployment."""
-    import os
-    from kamiwaza_client import KamiwazaClient
-
     # Initialize Kamiwaza client
     client = KamiwazaClient(os.getenv("KAMIWAZA_API_URI"))
     
@@ -42,7 +40,7 @@ def get_kamiwaza_endpoint():
     )[0]
     
     # Construct endpoint
-    endpoint = f"http://{instance.host_name}:{deployment.lb_port}/v1"
+    endpoint = f"http://{instance.host_name}:{deployment.lb_port}/v1/"
     return endpoint, deployment.m_name
 
 
@@ -105,23 +103,58 @@ def main():
             )
 
         with col2:
-            if model_type == "Kamiwaza":
-                st.info("🤖 Using Kamiwaza private model deployment")
-                try:
+            try:
+                if model_type == "Kamiwaza":
+                    st.info("🤖 Using Kamiwaza's self-hosted model deployment")
                     api_base, model_name = get_kamiwaza_endpoint()
                     st.success(f"Connected to {model_name} at {api_base}")
-                    demo_util.configure_llm(llm_configs, model_type="Kamiwaza", api_base=api_base)
-                except Exception as e:
-                    st.error(f"Failed to connect to Kamiwaza: {str(e)}")
-                    # Default to OpenAI if Kamiwaza fails
-                    model_type = "OpenAI"
-                    demo_util.configure_llm(llm_configs, model_type="OpenAI")
-            else:
-                demo_util.configure_llm(llm_configs, model_type=model_type)
+                    
+                    # Configure all LM instances to use Kamiwaza
+                    from knowledge_storm.lm import KamiwazaModel
+                    conv_simulator_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
+                    question_asker_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
+                    outline_gen_lm = KamiwazaModel(model='model', max_tokens=400, api_base=api_base)
+                    article_gen_lm = KamiwazaModel(model='model', max_tokens=700, api_base=api_base)
+                    article_polish_lm = KamiwazaModel(model='model', max_tokens=4000, api_base=api_base)
 
-        rm = YouRM(ydc_api_key=st.secrets['YDC_API_KEY'], k=engine_args.search_top_k)
-        runner = STORMWikiRunner(engine_args, llm_configs, rm)
-        st.session_state["runner"] = runner
+                    llm_configs.set_conv_simulator_lm(conv_simulator_lm)
+                    llm_configs.set_question_asker_lm(question_asker_lm)
+                    llm_configs.set_outline_gen_lm(outline_gen_lm)
+                    llm_configs.set_article_gen_lm(article_gen_lm)
+                    llm_configs.set_article_polish_lm(article_polish_lm)
+                    
+                    # Configure DSPy
+                    import dspy
+                    dspy.settings.configure(lm=conv_simulator_lm)
+                else:
+                    # Use existing OpenAI/Azure configuration
+                    llm_configs.init_openai_model(
+                        openai_api_key=st.secrets['OPENAI_API_KEY'],
+                        azure_api_key=st.secrets.get('AZURE_API_KEY'),
+                        openai_type=model_type.lower()
+                    )
+                    # Configure DSPy
+                    import dspy
+                    dspy.settings.configure(lm=llm_configs.conv_simulator_lm)
+
+                # Configure retriever
+                try:
+                    from knowledge_storm.rm import SerperRM
+                    rm = SerperRM(
+                        serper_search_api_key=st.secrets['SERPER_API_KEY'],
+                        query_params={'autocorrect': True, 'num': 10, 'page': 1}
+                    )
+                except KeyError:
+                    st.error("Serper API key not configured. Please set SERPER_API_KEY in secrets.")
+                    st.stop()
+
+                # Create runner with configured LLMs
+                runner = STORMWikiRunner(engine_args, llm_configs, rm)
+                st.session_state["runner"] = runner
+
+            except Exception as e:
+                st.error(f"Error configuring model: {str(e)}")
+                st.stop()
 
         if menu_selection == "My Articles":
             demo_util.clear_other_page_session_state(page_index=2)

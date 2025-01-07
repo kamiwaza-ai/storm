@@ -15,7 +15,7 @@ import streamlit as st
 # sys.path.append('../../')
 from knowledge_storm import STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs
 from knowledge_storm.lm import OpenAIModel
-from knowledge_storm.rm import YouRM
+from knowledge_storm.rm import SerperRM
 from knowledge_storm.storm_wiki.modules.callback import BaseCallbackHandler
 from knowledge_storm.utils import truncate_filename
 from stoc import stoc
@@ -438,29 +438,6 @@ def _display_references(citation_dict):
     else:
         st.markdown("**No references available**")
 
-
-def get_kamiwaza_endpoint():
-    client = KamiwazaClient(os.getenv("KAMIWAZA_API_URI"))
-    deployments = client.serving.list_deployments()
-    valid_deployments = []
-    for deployment in deployments:
-        if deployment.status == "DEPLOYED":
-            running_instances = [i for i in deployment.instances if i.status == "DEPLOYED"]
-            if running_instances:
-                valid_deployments.append((deployment, running_instances[0]))
-    
-    if not valid_deployments:
-        raise RuntimeError("No valid running Kamiwaza deployments found")
-        
-    deployment, instance = sorted(
-        valid_deployments,
-        key=lambda x: x[0].vram_allocation or 0,
-        reverse=True
-    )[0]
-    
-    endpoint = f"http://{instance.host_name}:{deployment.lb_port}/v1/"
-    return endpoint
-
 def _display_persona_conversations(conversation_log):
     """
     Display persona conversation in dialogue UI
@@ -520,25 +497,35 @@ def clear_other_page_session_state(page_index: Optional[int]):
 
 
 def set_storm_runner():
+    """Configure and initialize the STORM runner with SerperRM as the retriever."""
     current_working_dir = os.path.join(get_demo_dir(), "DEMO_WORKING_DIR")
     if not os.path.exists(current_working_dir):
         os.makedirs(current_working_dir)
 
     # configure STORM runner
     llm_configs = STORMWikiLMConfigs()
-    llm_configs.init_openai_model(openai_api_key=st.secrets['OPENAI_API_KEY'], openai_type='openai')
-    llm_configs.set_question_asker_lm(OpenAIModel(model='gpt-4-1106-preview', api_key=st.secrets['OPENAI_API_KEY'],
-                                                  api_provider='openai',
-                                                  max_tokens=500, temperature=1.0, top_p=0.9))
-    engine_args = STORMWikiRunnerArguments(
-        output_dir=current_working_dir,
-        max_conv_turn=3,
-        max_perspective=3,
-        search_top_k=3,
-        retrieve_top_k=5
-    )
+    engine_args = get_engine_args()
 
-    rm = YouRM(ydc_api_key=st.secrets['YDC_API_KEY'], k=engine_args.search_top_k)
+    # Use SerperRM instead of YouRM
+    try:
+        from knowledge_storm.rm import SerperRM
+        rm = SerperRM(
+            serper_search_api_key=st.secrets['SERPER_API_KEY'], 
+            query_params={'autocorrect': True, 'num': 10, 'page': 1}
+        )
+    except KeyError:
+        st.error("Serper API key not configured. Please set SERPER_API_KEY in secrets.")
+        st.stop()
+
+    # Configure default OpenAI model
+    try:
+        configure_llm(llm_configs, model_type="OpenAI")
+        # Configure DSPy to use the same LLM
+        import dspy
+        dspy.settings.configure(lm=llm_configs.conv_simulator_lm)
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
 
     runner = STORMWikiRunner(engine_args, llm_configs, rm)
     st.session_state["runner"] = runner
@@ -612,31 +599,43 @@ def get_engine_args():
 
 def configure_llm(llm_configs: STORMWikiLMConfigs, model_type: str, api_base: str = None):
     """Configure LLM based on selected model type."""
-    if model_type == "Kamiwaza":
-        from knowledge_storm.lm import KamiwazaModel
-        
-        # Configure all LM instances to use Kamiwaza
-        conv_simulator_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
-        question_asker_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
-        outline_gen_lm = KamiwazaModel(model='model', max_tokens=400, api_base=api_base)
-        article_gen_lm = KamiwazaModel(model='model', max_tokens=700, api_base=api_base)
-        article_polish_lm = KamiwazaModel(model='model', max_tokens=4000, api_base=api_base)
+    try:
+        if model_type == "Kamiwaza":
+            from knowledge_storm.lm import KamiwazaModel
+            
+            # Configure all LM instances to use Kamiwaza
+            conv_simulator_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
+            question_asker_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
+            outline_gen_lm = KamiwazaModel(model='model', max_tokens=400, api_base=api_base)
+            article_gen_lm = KamiwazaModel(model='model', max_tokens=700, api_base=api_base)
+            article_polish_lm = KamiwazaModel(model='model', max_tokens=4000, api_base=api_base)
 
-        llm_configs.set_conv_simulator_lm(conv_simulator_lm)
-        llm_configs.set_question_asker_lm(question_asker_lm)
-        llm_configs.set_outline_gen_lm(outline_gen_lm)
-        llm_configs.set_article_gen_lm(article_gen_lm)
-        llm_configs.set_article_polish_lm(article_polish_lm)
-        
-    elif model_type == "Azure":
-        llm_configs.init_openai_model(
-            openai_api_key=st.secrets['OPENAI_API_KEY'],
-            azure_api_key=st.secrets['AZURE_API_KEY'],
-            openai_type='azure'
-        )
-    else:  # OpenAI
-        llm_configs.init_openai_model(
-            openai_api_key=st.secrets['OPENAI_API_KEY'],
-            azure_api_key=st.secrets['AZURE_API_KEY'],
-            openai_type='openai'
-        )
+            llm_configs.set_conv_simulator_lm(conv_simulator_lm)
+            llm_configs.set_question_asker_lm(question_asker_lm)
+            llm_configs.set_outline_gen_lm(outline_gen_lm)
+            llm_configs.set_article_gen_lm(article_gen_lm)
+            llm_configs.set_article_polish_lm(article_polish_lm)
+            
+        elif model_type == "Azure":
+            if 'AZURE_API_KEY' not in st.secrets:
+                raise ValueError("Azure API key not configured")
+            if 'OPENAI_API_KEY' not in st.secrets:
+                raise ValueError("OpenAI API key not configured")
+                
+            llm_configs.init_openai_model(
+                openai_api_key=st.secrets['OPENAI_API_KEY'],
+                azure_api_key=st.secrets['AZURE_API_KEY'],
+                openai_type='azure'
+            )
+        else:  # OpenAI
+            if 'OPENAI_API_KEY' not in st.secrets:
+                raise ValueError("OpenAI API key not configured")
+                
+            llm_configs.init_openai_model(
+                openai_api_key=st.secrets['OPENAI_API_KEY'],
+                openai_type='openai'
+            )
+    except KeyError as e:
+        raise ValueError(f"Missing required API key: {str(e)}")
+    except Exception as e:
+        raise ValueError(f"Error configuring LLM: {str(e)}")

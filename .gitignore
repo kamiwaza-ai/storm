@@ -28,3 +28,5 @@ secrets.toml
 *results/
 .venv/
 collated.txt
+
+frontend/demo_light/DEMO_WORKING_DIR/*
