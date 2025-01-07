@@ -35,6 +35,28 @@ class STORMWikiLMConfigs(LMConfigs):
         self.article_gen_lm = None  # LLM used in article generation.
         self.article_polish_lm = None  # LLM used in article polishing.
 
+    # Add init_kamiwaza_model method to STORMWikiLMConfigs class
+    def init_kamiwaza_model(
+        self,
+        api_base: str,
+        temperature: Optional[float] = 1.0,
+        top_p: Optional[float] = 0.9,
+    ):
+        """Initialize configuration using Kamiwaza's OpenAI-compatible endpoint."""
+        kamiwaza_kwargs = {
+            'api_key': 'na',  # Kamiwaza doesn't use API keys for inference
+            'api_provider': 'openai',
+            'temperature': temperature,
+            'top_p': top_p,
+            'api_base': api_base,
+        }
+
+        self.conv_simulator_lm = OpenAIModel(model='model', max_tokens=500, **kamiwaza_kwargs)
+        self.question_asker_lm = OpenAIModel(model='model', max_tokens=500, **kamiwaza_kwargs)
+        self.outline_gen_lm = OpenAIModel(model='model', max_tokens=400, **kamiwaza_kwargs) 
+        self.article_gen_lm = OpenAIModel(model='model', max_tokens=700, **kamiwaza_kwargs)
+        self.article_polish_lm = OpenAIModel(model='model', max_tokens=4000, **kamiwaza_kwargs)
+
     def init_openai_model(
         self,
         openai_api_key: str,
@@ -332,10 +354,15 @@ class STORMWikiRunner(Engine):
         ) as f:
             for call in llm_call_history:
                 if "kwargs" in call:
-                    call.pop(
-                        "kwargs"
-                    )  # All kwargs are dumped together to run_config.json.
-                f.write(json.dumps(call) + "\n")
+                    call.pop("kwargs")  # All kwargs are dumped together to run_config.json.
+                # Convert ChatCompletion object to a serializable format
+                serializable_call = {}
+                for key, value in call.items():
+                    if hasattr(value, '__dict__'):
+                        serializable_call[key] = value.__dict__
+                    else:
+                        serializable_call[key] = value
+                f.write(json.dumps(serializable_call) + "\n")
 
     def _load_information_table_from_local_fs(self, information_table_local_path):
         assert os.path.exists(information_table_local_path), makeStringRed(

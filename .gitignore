@@ -19,9 +19,12 @@ build/
 .idea
 .venv
 
+venv/
+
 # Project-specific
 secrets.toml
 *.log
 */assertion.log
 *results/
 .venv/
+collated.txt

@@ -857,6 +857,34 @@ class KamiwazaModel(dspy.OpenAI):
         self.completion_tokens = 0
         return usage
 
+    def __call__(
+        self,
+        prompt: str,
+        only_completed: bool = True,
+        return_sorted: bool = False,
+        **kwargs,
+    ) -> list[dict[str, Any]]:
+        """Override the call method to ensure responses are JSON serializable."""
+        response = super().__call__(prompt, only_completed, return_sorted, **kwargs)
+        
+        # Make the response history JSON serializable
+        if self.history:
+            last_history = self.history[-1]
+            if "response" in last_history:
+                if hasattr(last_history["response"], "choices"):
+                    last_history["response"] = {
+                        "choices": [
+                            {
+                                "message": {"content": choice.message.content},
+                                "finish_reason": choice.finish_reason,
+                            }
+                            for choice in last_history["response"].choices
+                        ],
+                        "usage": last_history["response"].usage._asdict() if hasattr(last_history["response"], "usage") else None,
+                    }
+
+        return response
+
 
 class GoogleModel(dspy.dsp.modules.lm.LM):
     """A wrapper class for Google Gemini API."""

@@ -439,6 +439,28 @@ def _display_references(citation_dict):
         st.markdown("**No references available**")
 
 
+def get_kamiwaza_endpoint():
+    client = KamiwazaClient(os.getenv("KAMIWAZA_API_URI"))
+    deployments = client.serving.list_deployments()
+    valid_deployments = []
+    for deployment in deployments:
+        if deployment.status == "DEPLOYED":
+            running_instances = [i for i in deployment.instances if i.status == "DEPLOYED"]
+            if running_instances:
+                valid_deployments.append((deployment, running_instances[0]))
+    
+    if not valid_deployments:
+        raise RuntimeError("No valid running Kamiwaza deployments found")
+        
+    deployment, instance = sorted(
+        valid_deployments,
+        key=lambda x: x[0].vram_allocation or 0,
+        reverse=True
+    )[0]
+    
+    endpoint = f"http://{instance.host_name}:{deployment.lb_port}/v1/"
+    return endpoint
+
 def _display_persona_conversations(conversation_log):
     """
     Display persona conversation in dialogue UI
@@ -572,3 +594,49 @@ class StreamlitCallbackHandler(BaseCallbackHandler):
 
     def on_outline_refinement_end(self, outline: str, **kwargs):
         self.status_container.success(f'Finish leveraging the collected information.')
+
+
+def get_engine_args():
+    """Get default STORM engine arguments."""
+    from knowledge_storm import STORMWikiRunnerArguments
+    
+    current_working_dir = os.path.join(get_demo_dir(), "DEMO_WORKING_DIR")
+    return STORMWikiRunnerArguments(
+        output_dir=current_working_dir,
+        max_conv_turn=5,
+        max_perspective=5,
+        search_top_k=30,
+        retrieve_top_k=5,
+        max_thread_num=10
+    )
+
+def configure_llm(llm_configs: STORMWikiLMConfigs, model_type: str, api_base: str = None):
+    """Configure LLM based on selected model type."""
+    if model_type == "Kamiwaza":
+        from knowledge_storm.lm import KamiwazaModel
+        
+        # Configure all LM instances to use Kamiwaza
+        conv_simulator_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
+        question_asker_lm = KamiwazaModel(model='model', max_tokens=500, api_base=api_base)
+        outline_gen_lm = KamiwazaModel(model='model', max_tokens=400, api_base=api_base)
+        article_gen_lm = KamiwazaModel(model='model', max_tokens=700, api_base=api_base)
+        article_polish_lm = KamiwazaModel(model='model', max_tokens=4000, api_base=api_base)
+
+        llm_configs.set_conv_simulator_lm(conv_simulator_lm)
+        llm_configs.set_question_asker_lm(question_asker_lm)
+        llm_configs.set_outline_gen_lm(outline_gen_lm)
+        llm_configs.set_article_gen_lm(article_gen_lm)
+        llm_configs.set_article_polish_lm(article_polish_lm)
+        
+    elif model_type == "Azure":
+        llm_configs.init_openai_model(
+            openai_api_key=st.secrets['OPENAI_API_KEY'],
+            azure_api_key=st.secrets['AZURE_API_KEY'],
+            openai_type='azure'
+        )
+    else:  # OpenAI
+        llm_configs.init_openai_model(
+            openai_api_key=st.secrets['OPENAI_API_KEY'],
+            azure_api_key=st.secrets['AZURE_API_KEY'],
+            openai_type='openai'
+        )

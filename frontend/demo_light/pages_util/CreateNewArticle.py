@@ -35,7 +35,6 @@ def handle_not_started():
                         alert.empty()
                     else:
                         st.session_state["page3_write_article_state"] = "initiated"
-
 def handle_initiated():
     if st.session_state["page3_write_article_state"] == "initiated":
         current_working_dir = os.path.join(demo_util.get_demo_dir(), "DEMO_WORKING_DIR")
@@ -43,7 +42,13 @@ def handle_initiated():
             os.makedirs(current_working_dir)
 
         if "runner" not in st.session_state:
-            demo_util.set_storm_runner()
+            try:
+                demo_util.set_storm_runner()
+            except Exception as e:
+                st.error(f"Failed to initialize STORM runner: {str(e)}")
+                st.session_state["page3_write_article_state"] = "not started"
+                return
+                
         st.session_state["page3_current_working_dir"] = current_working_dir
         st.session_state["page3_write_article_state"] = "pre_writing"
 
