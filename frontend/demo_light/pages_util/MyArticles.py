@@ -47,25 +47,33 @@ def my_articles_page():
             with bottom_menu[2]:
                 batch_size = st.selectbox("Page Size", options=[24, 48, 72])
             with bottom_menu[1]:
-                total_pages = (
-                    int(len(article_names) / batch_size) if int(len(article_names) / batch_size) > 0 else 1
-                )
+                total_pages = max(1, (len(article_names) + batch_size - 1) // batch_size)
                 current_page = st.number_input(
-                    "Page", min_value=1, max_value=total_pages, step=1
+                    "Page",
+                    min_value=1,
+                    max_value=total_pages,
+                    step=1,
+                    value=min(current_page, total_pages) if 'current_page' in locals() else 1
                 )
             with bottom_menu[0]:
                 st.markdown(f"Page **{current_page}** of **{total_pages}** ")
-            # show article cards
+                    # show article cards
             with pagination:
                 my_article_count = 0
                 start_index = (current_page - 1) * batch_size
-                end_index = min(current_page * batch_size, len(article_names))
-                for article_name in article_names[start_index: end_index]:
+                # Add bounds checking
+                total_items = len(article_names)
+                if start_index >= total_items:
+                    current_page = 1
+                    start_index = 0
+                end_index = min(current_page * batch_size, total_items)
+                
+                for article_name in article_names[start_index:end_index]:
                     column_to_add = my_article_columns[my_article_count % 3]
                     my_article_count += 1
                     article_card_setup(column_to_add=column_to_add,
-                                       card_title=["My Article"],
-                                       article_name=article_name)
+                                    card_title=["My Article"],
+                                    article_name=article_name)
         else:
             with my_article_columns[0]:
                 hasClicked = card(title="Get started",

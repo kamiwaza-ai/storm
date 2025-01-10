@@ -56,7 +56,7 @@ def main():
         for key, value in st.secrets.items():
             if type(value) == str:
                 os.environ[key] = value
-
+            
     # initialize session_state
     if "selected_article_index" not in st.session_state:
         st.session_state["selected_article_index"] = 0
@@ -97,7 +97,7 @@ def main():
         with col1:
             model_type = st.selectbox(
                 "Select Model",
-                ["OpenAI", "Azure", "Kamiwaza"],
+                ["Please Select a Model Provider", "OpenAI", "Azure", "Kamiwaza"],
                 index=0,
                 help="Choose the model provider to use"
             )
@@ -126,6 +126,8 @@ def main():
                     # Configure DSPy
                     import dspy
                     dspy.settings.configure(lm=conv_simulator_lm)
+                elif model_type == "Please Select a Model Provider":
+                    return
                 else:
                     # Use existing OpenAI/Azure configuration
                     llm_configs.init_openai_model(
