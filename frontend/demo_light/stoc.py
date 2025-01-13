@@ -35,20 +35,23 @@ class stoc:
 
     def toc(self, expander):
         st.write(DISABLE_LINK_CSS, unsafe_allow_html=True)
-        # st.sidebar.caption("Table of contents")
         if expander is None:
             expander = st.sidebar.expander("**Table of contents**", expanded=True)
         with expander:
+            # Add height constraint and scrolling
             with st.container(height=600, border=False):
                 markdown_toc = ""
-                for title_size, title in self.toc_items:
-                    h = int(title_size.replace("h", ""))
-                    markdown_toc += (
+                # Process in smaller chunks
+                chunk_size = 200  # Adjust if needed
+                for i in range(0, len(self.toc_items), chunk_size):
+                    chunk = self.toc_items[i:i + chunk_size]
+                    for title_size, title in chunk:
+                        h = int(title_size.replace("h", ""))
+                        markdown_toc += (
                             " " * 2 * h
                             + "- "
                             + f'<a href="#{normalize(title)}" class="toc"> {title}</a> \n'
-                    )
-                # st.sidebar.write(markdown_toc, unsafe_allow_html=True)
+                        )
                 st.write(markdown_toc, unsafe_allow_html=True)
 
     @classmethod

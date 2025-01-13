@@ -413,16 +413,30 @@ def _construct_citation_dict_from_search_result(search_results):
 
 
 def _display_main_article_text(article_text, citation_dict, table_content_sidebar):
-    # Post-process the generated article for better display.
-    if "Write the lead section:" in article_text:
-        article_text = article_text[
-                       article_text.find("Write the lead section:") + len("Write the lead section:"):]
-    if article_text[0] == '#':
-        article_text = '\n'.join(article_text.split('\n')[1:])
-    article_text = DemoTextProcessingHelper.add_inline_citation_link(article_text, citation_dict)
-    # '$' needs to be changed to '\$' to avoid being interpreted as LaTeX in st.markdown()
-    article_text = article_text.replace("$", "\\$")
-    stoc.from_markdown(article_text, table_content_sidebar)
+    # Split into manageable chunks if content is very large 
+    max_chunk_size = 25000  # Characters
+    if len(article_text) > max_chunk_size:
+        chunks = [article_text[i:i + max_chunk_size] 
+                 for i in range(0, len(article_text), max_chunk_size)]
+        
+        current_chunk = st.session_state.get('current_chunk', 0)
+        chunk_text = chunks[current_chunk]
+        
+        cols = st.columns([1, 1, 1])
+        if current_chunk > 0:
+            if cols[0].button('Previous'):
+                st.session_state.current_chunk -= 1
+                st.rerun()
+                
+        if current_chunk < len(chunks) - 1:
+            if cols[2].button('Next'):
+                st.session_state.current_chunk += 1
+                st.rerun()
+                
+        cols[1].write(f"Page {current_chunk + 1} of {len(chunks)}")
+        stoc.from_markdown(chunk_text, table_content_sidebar)
+    else:
+        stoc.from_markdown(article_text, table_content_sidebar)
 
 
 def _display_references(citation_dict):
