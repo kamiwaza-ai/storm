@@ -824,7 +824,7 @@ class KamiwazaModel(dspy.OpenAI):
         self,
         model: str = "model",
         api_key: str = "na",
-        api_base: str = "http://prod.kamiwaza.ai:51110/v1",
+        api_base: str = "http://turbo.kamiwaza.ai:51110/v1",
         model_type: Literal["chat", "text"] = "chat",
         **kwargs,
     ):
